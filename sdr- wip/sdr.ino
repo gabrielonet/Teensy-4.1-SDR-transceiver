@@ -5,7 +5,7 @@
 #include <Audio.h>                         // Teensy audio library
 
 // Number of Filter Coefficients
-#define NO_HILBERT_COEFFS 70               // Used to define the Hilbert transform filter arrays. More typical than 'const int'.
+#define NO_HILBERT_COEFFS 200               // Used to define the Hilbert transform filter arrays. More typical than 'const int'.
 
 // Define Constants and Vaviables
 static const long bandStart = 1000000;     // start of HF band
