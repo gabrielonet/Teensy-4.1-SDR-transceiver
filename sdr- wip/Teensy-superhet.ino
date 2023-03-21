@@ -3,29 +3,11 @@
 #include <si5351.h>                       // Si5351Jason library
 #include <LiquidCrystal_I2C.h>             // LCD library
 #include <Audio.h>                         // Teensy audio library
-
 // Number of Filter Coefficients
 #define NO_HILBERT_COEFFS 200               // Used to define the Hilbert transform filter arrays. More typical than 'const int'.
-
-// Define Constants and Vaviables
-static const long bandStart = 1000000;     // start of HF band
-static const long bandEnd =   30000000;    // end of HF band
+// Define Constants and Variables
 static const long bandInit =  9000000;     // where to initially set the frequency
-volatile long oldfreq = 0;
 volatile long freq = bandInit ;
-volatile long radix = 1;                // how much to change the frequency by clicking the rotary encoder will change this.
-volatile int updatedisplay = 0;
-int freq_length_0 = 7;
-
-// Rotary Encoder
-static const int pushPin = 39;
-static const int rotBPin = 36;
-static const int rotAPin = 35;
-volatile int rotState = 0;
-volatile int rotAval = 1;
-volatile int rotBval = 1;
-volatile int rotAcc = 0;
-
 
 // Iowa Hills Hilbert transform filter coefficients
 const short Hilbert_Plus_45_Coeffs[NO_HILBERT_COEFFS] = {
@@ -175,7 +157,6 @@ const short Hilbert_Minus_45_Coeffs[NO_HILBERT_COEFFS] = {
   (short)(32768 * 0.000287988910943362)
 };
 
-
 // Instantiate the Objects
 Si5351 si5351;                            // Name for the Si5351 DDS
 AudioControlSGTL5000    audioShield;      // Name for the Teensy audio CODEC on the audio shield
@@ -221,7 +202,7 @@ void setup()
   AudioNoInterrupts();
   AudioMemory(16);
   audioShield.enable();
-  audioShield.volume(0.7);            // Constant. Use external volume control on the audio amp
+  audioShield.volume(0.7);  // Constant. Use external volume control on the audio amp
   AudioInterrupts();
 
   // Setup transceiver mode
