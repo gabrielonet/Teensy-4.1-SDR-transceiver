@@ -10,7 +10,7 @@
 // Define Constants and Vaviables
 static const long bandStart = 1000000;     // start of HF band
 static const long bandEnd =   30000000;    // end of HF band
-static const long bandInit =  7000000;     // where to initially set the frequency
+static const long bandInit =  9000000;     // where to initially set the frequency
 volatile long oldfreq = 0;
 volatile long freq = bandInit ;
 volatile long radix = 1;                // how much to change the frequency by clicking the rotary encoder will change this.
@@ -177,7 +177,6 @@ const short Hilbert_Minus_45_Coeffs[NO_HILBERT_COEFFS] = {
 
 
 // Instantiate the Objects
-LiquidCrystal_I2C lcd(0x27, 16, 2);       // Name for the LCD. Set the LCD address to either 0x27 or 0x3F for a 16 chars and 2 line display
 Si5351 si5351;                            // Name for the Si5351 DDS
 AudioControlSGTL5000    audioShield;      // Name for the Teensy audio CODEC on the audio shield
 
@@ -196,28 +195,22 @@ AudioConnection         patchCord15(RX_Hilbert_Plus_45, 0, RX_Summer, 0);     //
 AudioConnection         patchCord20(RX_Hilbert_Minus_45, 0, RX_Summer, 1);    // Hilbert transform -45 to receiver summer
 AudioConnection         patchCord25(RX_Summer, 0, audioOutput, 0);            // Receiver summer to receiver LPF
 
+void Turn_On_Receiver()
+{
+  AudioNoInterrupts();
+  audioShield.inputSelect(AUDIO_INPUT_LINEIN);
+  audioShield.lineInLevel(5);                                               // Default is 5
+  audioShield.unmuteHeadphone();
+  RX_Hilbert_Plus_45.begin(Hilbert_Plus_45_Coeffs, NO_HILBERT_COEFFS);
+  RX_Hilbert_Minus_45.begin(Hilbert_Minus_45_Coeffs, NO_HILBERT_COEFFS);
+  RX_Summer.gain(0, 1);
+  RX_Summer.gain(1, -1);
+  AudioInterrupts();
+}
 
 void setup()
 {
-  // Setup input switches
-  pinMode(rotAPin, INPUT);
-  pinMode(rotBPin, INPUT);
-  pinMode(pushPin, INPUT);
-  digitalWrite(rotAPin, HIGH);
-  digitalWrite(rotBPin, HIGH);
-  digitalWrite(pushPin, HIGH);
   Serial.begin(9600);
-
-  // Setup interrupt pins
-  attachInterrupt(digitalPinToInterrupt(rotAPin), ISRrotAChange, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(rotBPin), ISRrotBChange, CHANGE);
-
-  // Setup the lcd
-  lcd.begin();
-  lcd.backlight();
-  lcd.setCursor(0, 1);
-  lcd.print("YO8RXP SDR");
-
   // Setup the DDS
   si5351.init(SI5351_CRYSTAL_LOAD_8PF, 0,0);
   si5351.set_pll(SI5351_PLL_FIXED, SI5351_PLLA);
@@ -233,223 +226,14 @@ void setup()
 
   // Setup transceiver mode
   Turn_On_Receiver();
-  UpdateDisplay();
 }
 
 void loop()
 {
-  if (freq != oldfreq)                // Check to see if the frequency has changed. If so, update everything.
-  {
-    UpdateDisplay();
-    SendFrequency();
-    oldfreq = freq;
-  }
-
-  if (digitalRead(pushPin) == LOW)    // Update cursor, but also stop it from flickering
-  {
-    while (digitalRead(pushPin) == LOW)
-    {
-      if (updatedisplay == 1)
-      {
-        UpdateDisplay();
-        updatedisplay = 0;
-      }
-    }
-  }
+delay(1000000000); // Do nothing here
 }
-
-
-void Turn_On_Receiver()
-{
-  AudioNoInterrupts();
-  audioShield.inputSelect(AUDIO_INPUT_LINEIN);
-  audioShield.lineInLevel(5);                                               // Default is 5
-  audioShield.unmuteHeadphone();
-  RX_Hilbert_Plus_45.begin(Hilbert_Plus_45_Coeffs, NO_HILBERT_COEFFS);
-  RX_Hilbert_Minus_45.begin(Hilbert_Minus_45_Coeffs, NO_HILBERT_COEFFS);
-
-  if (freq <= 9999999)          // LSB
-  {
-    RX_Summer.gain(0, 1);
-    RX_Summer.gain(1, -1);
-  }
-  if (freq > 9999999)           // USB
-  {
-    RX_Summer.gain(0, 1);
-    RX_Summer.gain(1, 1);
-  }
-
-  AudioInterrupts();
-}
-
-
-// Interrupt routines
-void ISRrotAChange()
-{
-  
-  if (digitalRead(rotAPin))
-  {
-    rotAval = 1;
-    UpdateRot();
-  }
-  else
-  {
-    rotAval = 0;
-    UpdateRot();
-  }
-}
-
-
-void ISRrotBChange()
-{
-  if (digitalRead(rotBPin))
-  {
-    rotBval = 1;
-    UpdateRot();
-  }
-  else
-  {
-    rotBval = 0;
-    UpdateRot();
-  }
-}
-
-
-void UpdateRot()
-
-{
-
-
-  switch (rotState)
-  {
-
-    case 0:                                         // Idle state, look for direction
-      if (!rotBval)
-        rotState = 1;                               // CW 1
-      if (!rotAval)
-        rotState = 11;                              // CCW 1
-      break;
-
-    case 1:                                         // CW, wait for A low while B is low
-      if (!rotBval)
-      {
-        if (!rotAval)
-        {
-          // either increment radixindex or freq
-          if (digitalRead(pushPin) == LOW)
-          {
-            updatedisplay = 1;
-            if (radix == 1000000)
-              radix = 100000;
-            else if (radix == 100000)
-              radix = 10000;
-            else if (radix == 10000)
-              radix = 1000;
-            else if (radix == 1000)
-              radix = 100;
-            else if (radix == 100)
-              radix = 10;
-            else if (radix == 10)
-              radix = 1;
-            else
-              radix = 1000000;
-          }
-          else
-          {
-            freq = (freq + radix);
-            if (freq > bandEnd)
-              freq = bandEnd;
-          }
-          rotState = 2;                             // CW 2
-        }
-      }
-      else if (rotAval)
-        rotState = 0;                               // It was just a glitch on B, go back to start
-      break;
-
-    case 2:                                         // CW, wait for B high
-      if (rotBval)
-        rotState = 3;                               // CW 3
-      break;
-
-    case 3:                                         // CW, wait for A high
-      if (rotAval)
-        rotState = 0;                               // back to idle (detent) state
-      break;
-
-    case 11:                                        // CCW, wait for B low while A is low
-      if (!rotAval)
-      {
-        if (!rotBval)
-        {
-          // either decrement radixindex or freq
-          if (digitalRead(pushPin) == LOW)
-          {
-            updatedisplay = 1;
-            if (radix == 1)
-              radix = 10;
-            else if (radix == 10)
-              radix = 100;
-            else if (radix == 100)
-              radix = 1000;
-            else if (radix == 1000)
-              radix = 10000;
-            else if (radix == 10000)
-              radix = 100000;
-            else if (radix == 100000)
-              radix = 1000000;
-            else
-              radix = 1;
-          }
-          else
-          {
-            freq = (freq - radix);
-            if (freq < bandStart)
-              freq = bandStart;
-          }
-          rotState = 12;                            // CCW 2
-        }
-      }
-      else if (rotBval)
-        rotState = 0;                               // It was just a glitch on A, go back to start
-      break;
-
-    case 12:                                        // CCW, wait for A high
-      if (rotAval)
-        rotState = 13;                              // CCW 3
-      break;
-
-    case 13:                                        // CCW, wait for B high
-      if (rotBval)
-        rotState = 0;                               // back to idle (detent) state
-      break;
-  }
-
-}
-
-
-void UpdateDisplay()
-{
-  int freq_length = String(freq).length();
-   if (freq_length_0 != freq_length )
-  {
-      lcd.setCursor(0, 0);
-      lcd.print("                ");   // Clear display 
-      freq_length_0 = freq_length ;
-  }
-
-  String mhz = String(freq).substring(0,1);
-  String khz = String(freq).substring(1,4);
-  String hz = String(freq).substring(4,7);
-
-  lcd.setCursor(0, 0);
-  lcd.print(mhz + "," + khz + "."+ hz + " Mhz");
-  
-}
-
 
 void SendFrequency()
 {
   //si5351.set_freq((freq * 4) * 100ULL , SI5351_CLK0);
-
 }
